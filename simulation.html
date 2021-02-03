@@ -78,6 +78,49 @@
 					enableShadows(c);
 			}
 
+			const friction = function(velo, dt){
+				let acceleration = -0.25;
+
+				let v = velo.length() + acceleration * dt;
+				if(v < 0)
+					v = 0;
+
+				return velo.setLength(v);
+			}
+
+			// the ball will receive a velocity impulse v at the time point t
+			let v = [ { t : 0, v: new THREE.Vector2(1,0)}, { t: 5, v: new THREE.Vector2(0,1)}, { t: 10, v: new THREE.Vector2(-1,0)}, { t: 15, v: new THREE.Vector2(-0.7,-0.7)}, { t : 20, v: new THREE.Vector2(1,0)}, { t: 25, v: new THREE.Vector2(0,1)}, { t: 30, v: new THREE.Vector2(-1,0)}, { t: 35, v: new THREE.Vector2(-0.7,-0.7)}];
+
+			const velocityImpulse = function(timeSinceStart, velo){
+				let t = timeSinceStart;
+
+				for(var i = 0; i < v.length; i++){
+					if(v[i] != null && v[i].t < t){
+						velo.add(v[i].v);
+						v[i] = null;
+					}
+				}
+
+				return velo;
+			}
+
+			let velo = new THREE.Vector2(0,0);
+			let pos = new THREE.Vector2(-1,-1);
+			let lastTime = 0;
+
+			const ballAnimation = function(timeSinceStart){
+				let dt = timeSinceStart - lastTime;
+				lastTime = timeSinceStart;
+
+				velo = friction(velo, dt);
+				
+				velo = velocityImpulse(timeSinceStart, velo);
+
+				pos.add(velo.clone().multiplyScalar(dt));
+
+				return pos;
+			}
+
 			const scene = new THREE.Scene();
 			const camera = createCamera();
 
@@ -105,17 +148,20 @@
 
 			enableShadows(scene);
 
-			let rpm = 20.0;
-
 			const render = function () {
-				const oneMinuteInMs = 60000;
-				angle = performance.now() / oneMinuteInMs * rpm;
+				const oneSecondInMs = 1000;
+				let t = performance.now() / oneSecondInMs;
 
-				ball.position.x = Math.cos(angle);
-				ball.position.y = Math.sin(angle);
+				p = ballAnimation(t);
 
-				camera.position.x = Math.cos(-angle) * 3;
-				camera.position.y = Math.sin(-angle) * 3;
+				ball.position.x = p.x;
+				ball.position.y = p.y;
+
+				console.log("x: " + p.x + ", " + p.y);
+
+				camera.position.x = -p.x;
+				camera.position.y = -p.y;
+				camera.position.z = 3;
 			    camera.lookAt(0,0,0);
 
 				renderer.render( scene, camera );
