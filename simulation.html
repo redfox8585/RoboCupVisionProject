@@ -30,21 +30,30 @@
 
 			const createObstacles = function(){
 				
-				const geometry = new THREE.BoxGeometry( 0.5, 0.3, 1 );
+				const geometry = new THREE.BoxGeometry( 0.5, 0.6, 1 );
 				const material = new THREE.MeshPhongMaterial( {color: 0x0000ff} );
 				const cube = new THREE.Mesh( geometry, material );
-				cube.position.z = 0.15
+				cube.position.z = 0.3
 
 				objects = new THREE.Object3D();
 
+				cube.position.x = 0.3;
 				objects.add(cube.clone());
 		
 				cube.position.x = 1.6;
-				cube.position.y = -0.6;
+				cube.position.y = -0.9;
 				objects.add(cube.clone());
 				
 				cube.position.x = -1;
 				cube.position.y = -1;
+				objects.add(cube.clone());
+
+				cube.position.x = -1.3;
+				cube.position.y = 1.4;
+				objects.add(cube.clone());
+
+				cube.position.x = 1.5;
+				cube.position.y = 1.6;
 				objects.add(cube.clone());
 
 				return objects;
@@ -131,7 +140,11 @@
 
 			const createRenderer = function(x, y, width, height){
 				
-				return {	camera: createCamera( width, height), 
+				return {	camera: createCamera( width, height),
+							viewRect: {x: x,
+							y: y,
+							width: width,
+							height: height},
 							render: function(scene, position, lookAt) {
 									this.camera.position.x = position.x;
 									this.camera.position.y = position.y;
@@ -150,13 +163,13 @@
 			renderers = [];
 
 			const rowCount = 2;
-			const columnCount = 2;
+			const columnCount = 3;
 
-			const width = Math.floor(window.innerWidth / rowCount);
-			const height = Math.floor(window.innerHeight / columnCount);
+			const width = Math.floor(window.innerWidth / columnCount);
+			const height = Math.floor(window.innerHeight / rowCount);
 			for(let r = 0; r < rowCount; r++)
 				for(let c = 0; c < columnCount; c++){
-					renderers.push(createRenderer(width * r, height * c, width, height));
+					renderers.push(createRenderer(width * c, height * r, width, height));
 				}
 
 			const soccerField = createSoccerField();
@@ -176,10 +189,19 @@
 			const aLight = new THREE.AmbientLight( 0x808080 );
 			scene.add( aLight );
 
-			cameras = [ {pos : new THREE.Vector3(-3, 2, 1), lookAt: new THREE.Vector3(0,0,0)},
+			cameras = [ {pos : new THREE.Vector3(-3, 2, 1), lookAt: new THREE.Vector3(0,1,0)},
 						{pos : new THREE.Vector3(-3, -3, 1), lookAt: new THREE.Vector3(0,0,0)},
-						{pos : new THREE.Vector3(3, 2, 1), lookAt: new THREE.Vector3(0,0,0)},
-						{pos : new THREE.Vector3(3, -4, 1), lookAt: new THREE.Vector3(0,0,0)}]
+						{pos : new THREE.Vector3(1, 2, 1), lookAt: new THREE.Vector3(0,0,0)},
+						{pos : new THREE.Vector3(3, -4, 1), lookAt: new THREE.Vector3(2,1,0)},
+						{pos : new THREE.Vector3(2, -4, 1), lookAt: new THREE.Vector3(0,0,0)},
+						{pos : new THREE.Vector3(0, 0, 3), lookAt: new THREE.Vector3(0,0,0)}]
+
+
+			var simulationData = {
+				cameras : [],
+				positions : [],
+				duration : 40
+			};
 
 			const render = function () {
 				const oneSecondInMs = 1000;
@@ -190,18 +212,23 @@
 				ball.position.x = p.x;
 				ball.position.y = p.y;
 
-				console.log("x: " + p.x + ", " + p.y);
+				simulationData.positions.push({x : p.x, y : p.y , t : t});
 
-				renderers[0].render(scene, new THREE.Vector3(-p.x, -p.y, 3), new THREE.Vector3(0,0,0));
-
-				for(let i = 1; i < renderers.length ; i++)
+				for(let i = 0; i < renderers.length ; i++)
 					renderers[i].render(scene, cameras[i].pos, cameras[i].lookAt);
 
+				if(t <= simulationData.duration)
+					requestAnimationFrame( render );
+				else{
+					for(r of renderers)
+						simulationData.cameras.push({ transform : r.camera.elements, viewRect: r.viewRect });
 
-				requestAnimationFrame( render );
+					document.body.innerHTML = JSON.stringify(simulationData);
+				}
 			};
 
 			render();
+
 		</script>
 	</body>
 </html>
