@@ -170,11 +170,11 @@
 
 			const dLight = createLight(3,3,10);
 			scene.add(dLight);
+
+			enableShadows(scene);
 			
 			const aLight = new THREE.AmbientLight( 0x808080 );
 			scene.add( aLight );
-
-			enableShadows(scene);
 
 			cameras = [ {pos : new THREE.Vector3(-3, 2, 1), lookAt: new THREE.Vector3(0,0,0)},
 						{pos : new THREE.Vector3(-3, -3, 1), lookAt: new THREE.Vector3(0,0,0)},
