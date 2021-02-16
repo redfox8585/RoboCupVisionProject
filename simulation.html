@@ -224,7 +224,7 @@
 					let h = window.innerHeight;
 					
 					for(r of renderers)
-						simulationData.cameras.push({ transform : r.camera.elements, viewRect: {x: r.viewRect.x / w, y: r.viewRect.y / h, w: r.viewRect.w / w, h: r.viewRect.h / h }});
+						simulationData.cameras.push({ transform : r.camera.matrix.elements, projection: r.camera.projectionMatrix.elements, viewRect: {x: r.viewRect.x / w, y: r.viewRect.y / h, width: r.viewRect.width / w, height: r.viewRect.height / h }});
 
 					document.body.innerHTML = JSON.stringify(simulationData);
 				}
