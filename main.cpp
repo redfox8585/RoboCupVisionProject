@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <vector>
 #include <string>
+#include <fstream>
+#include <thread>
 #include <opencv2/core.hpp>    // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/imgproc.hpp> // Gaussian Blur
 #include <opencv2/highgui.hpp> // OpenCV window I/O
@@ -9,6 +11,7 @@
 #include <opencv2/videoio.hpp> // Video write
 
 using namespace cv;
+using namespace std;
 
 Scalar BALL_DETECTION_COLOR = Scalar(255, 255, 255);
 struct Ball
@@ -158,6 +161,9 @@ int main(int argc, char **argv)
         FileStorage fs(argv[2], 0);
         cv::VideoCapture inputVideo;
 
+        ofstream ballPositions;
+        ballPositions.open ("ballPositions.json");
+
         inputVideo.open(argv[1]);
         int frameCount = inputVideo.get(CAP_PROP_FRAME_COUNT);
         Size S = Size((int)inputVideo.get(CAP_PROP_FRAME_WIDTH) * 0.3332,
@@ -175,24 +181,32 @@ int main(int argc, char **argv)
         Ball ballPosition;
         std::vector<Mat> views;
         Mat currentFrame;
-        float currentFrameNumber = 0.0;
 
-        for (;;)
+        ballPositions << "[";
+        for (int k = 0; k < frameCount; k++)
         {
-            visualize_progress_bar(currentFrameNumber, frameCount);
+            visualize_progress_bar(k, frameCount);
 
             inputVideo >> currentFrame;
-            currentFrameNumber++;
 
-            if (currentFrame.empty())
-            {
-                break;
-            }
+            if(k > 0)
+                ballPositions << ", ";
 
+            ballPositions << "[";
             views = crop_image(currentFrame, fs);
-            analyze_view(views[1], ballPosition);
-            write_video_with_ball_detection(ballPosition, views[1], outputVideo);
+            for(unsigned int i = 0; i < views.size(); i++){
+
+                analyze_view(views[i], ballPosition);
+                if(i > 0)
+                    ballPositions << ", ";
+                ballPositions << "{ x: " << ballPosition.x << ", y: " << ballPosition.y << ", r: " << ballPosition.r << " }";
+            }
+            ballPositions << "]";
+            //write_video_with_ball_detection(ballPosition, views[1], outputVideo);
         }
+        ballPositions << "]";
+
+        ballPositions.close();
 
         std::cout << "\nFinished" << std::endl;
         inputVideo.release();
