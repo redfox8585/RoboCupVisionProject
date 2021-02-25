@@ -60,7 +60,7 @@
 			}
 
 			const createCamera = function(width, height){
-				const camera = new THREE.PerspectiveCamera( 75, width / height, 0.1, 1000 );
+				const camera = new THREE.PerspectiveCamera( 30, width / height, 0.1, 1000 );
 				camera.position.y = -2.5;
 				camera.position.z = 3;
 			    camera.up = new THREE.Vector3(0,0,1);
@@ -223,8 +223,19 @@
 					let w = window.innerWidth;
 					let h = window.innerHeight;
 					
-					for(r of renderers)
-						simulationData.cameras.push({ transform : r.camera.matrix.elements, projection: r.camera.projectionMatrix.elements, viewRect: {x: r.viewRect.x / w, y: r.viewRect.y / h, width: r.viewRect.width / w, height: r.viewRect.height / h }});
+					// 180° rotation around y axis
+					const rotY180 = new THREE.Matrix4();
+					rotY180.set(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1);
+					for(r of renderers){
+						// the local camera coordinatesystem z Axis should point in the Viewing direction ( default for opengl: point away)
+						// the matrix is also transposed because the elements are stored in column major order but should be extracted in row major order
+						r.camera.matrix.multiply(rotY180).transpose();  
+
+						// this is the focalLength coresponding to the x-axis in the image plane (x values there range from -1 to 1)
+						let focalLengthX = r.camera.projectionMatrix.elements[0];
+
+						simulationData.cameras.push({ transform : r.camera.matrix.elements, focalLengthX: focalLengthX, viewRect: {x: r.viewRect.x / w, y: r.viewRect.y / h, width: r.viewRect.width / w, height: r.viewRect.height / h }});
+					}
 
 					document.body.innerHTML = JSON.stringify(simulationData);
 				}

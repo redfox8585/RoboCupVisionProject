@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <vector>
 #include <string>
@@ -13,63 +12,51 @@
 using namespace cv;
 using namespace std;
 
-Scalar BALL_DETECTION_COLOR = Scalar(255, 255, 255);
+Scalar BALL_DETECTION_COLOR = Scalar(255, 255, 0);
 struct Ball
 {
     float x, y, r;
 };
 
+struct ViewDimensions
+{
+    float x, y, width, height;
+};
+
+
 /* This function crops the current frame into six images
 that represent the six different views from the simulation. */
-std::vector<Mat> crop_image(Mat currentFrame, FileStorage fs)
+std::vector<Mat> crop_image(Mat currentFrame, vector<ViewDimensions> dimensions)
 {
     std::vector<Mat> views;
 
-    struct view_dimensions
-    {
-        float x, y, width, height;
-    };
 
     float frameWidth = currentFrame.size().width;
     float frameHeight = currentFrame.size().height;
 
-    FileNode root = fs["cameras"];
-
     for (int i = 0; i < 6; i++)
-    { // read json file to extract view position
-        view_dimensions dimensions;
-        Mat currentView;
+    {
+        // the origin of dimensions in the bottom left corner but the origin of opencv images is in the top left corner
+        float x = dimensions[i].x * frameWidth;
+        float width = dimensions[i].width * frameWidth;
+        float y = (1.f - dimensions[i].y - dimensions[i].height) * frameHeight;
+        float height = dimensions[i].height * frameHeight;
 
-        FileNode camera = root[i];
-        FileNode viewRect = camera["viewRect"];
+        Mat ROI(currentFrame, Rect(x, y, width, height));
 
-        dimensions.x = viewRect["x"];
-        dimensions.y = viewRect["y"];
-        dimensions.width = viewRect["width"];
-        dimensions.height = viewRect["height"];
-
-        // printf("View: \nx: %6.4lf\ny: %6.4lf\nwidth: %6.4lf\nheight: %6.4lf\n", view.x, view.y, view.width, view.height);
-
-        Mat ROI(currentFrame, Rect(dimensions.x * frameWidth, dimensions.y * frameHeight, dimensions.width * frameWidth, dimensions.height * frameHeight));
-        ROI.copyTo(currentView);
-
-        views.push_back(currentView);
-
-        // imshow("cropped", croppedImage);
-        // waitKey();
+        views.push_back(ROI.clone());
     }
     return views;
 }
 
 /* This function analyzes a view to detect the ball and store the ball position in ballPositions*/
-void analyze_view(Mat view, Ball &ballPosition)
+Ball analyze_view(Mat view)
 {
-
     Ball noBall = {
-        -1, // x coordiante
-        -1, // y coordiante
+        0, // x coordiante
+        0, // y coordiante
         -1, // radius
-    };
+    }; // no ball present if radius negative
 
     // convert colorspace for better ball detection from BGR to HSV.
     Mat hsv_conversion;
@@ -92,18 +79,14 @@ void analyze_view(Mat view, Ball &ballPosition)
         balls;
     HoughCircles(threshold_image, balls, HOUGH_GRADIENT, 1, threshold_image.rows / 8, 100, 20, 1, 100);
     if (balls.size() == 0)
-    {
-        ballPosition = noBall;
-        return;
-    };
+        return noBall;
 
-    Ball temp_ball = {
-        balls[0][0],
-        balls[0][1],
-        balls[0][2]};
-    ballPosition = temp_ball;
+    Ball ballPosition = {
+        balls[0][0] / float(view.cols) * 2.f - 1.f,
+        (1.f - balls[0][1] / float(view.rows)) * 2.f - 1.f,
+        balls[0][2] / float(view.cols) };
 
-    return;
+    return ballPosition;
 }
 
 /* This function takes the original frames from the input video and the ballPosition,
@@ -114,7 +97,7 @@ void write_video_with_ball_detection(Ball &ballPosition, Mat view, VideoWriter &
     view.copyTo(frame_with_ball_detection);
 
     int radius = std::round(ballPosition.r);
-    if (ballPosition.x != -1)
+    if (ballPosition.r > 0)
     {
         cv::Point center(std::round(ballPosition.x), std::round(ballPosition.y));
         cv::circle(frame_with_ball_detection, center, radius, BALL_DETECTION_COLOR, 3);
@@ -148,9 +131,74 @@ void visualize_progress_bar(float currentFrameNumber, float frameCount)
     std::cout.flush();
 };
 
+void writeBallPositions(vector<vector<Ball>> &ballPositions, vector<double> timestamps){
+    ofstream out;
+    out.open ("ballPositions.json");
+    out << "{ \"positions\" : [";
+
+    for(unsigned int i = 0; i < ballPositions.size(); i++){
+        if(i > 0)
+            out << ", ";
+        out << "[";
+        for(unsigned int k = 0; k < ballPositions[i].size(); k++){
+            if(k > 0)
+                out << ", ";
+            out << "{ \"x\": " << ballPositions[i][k].x << ", \"y\": " << ballPositions[i][k].y << ", \"r\": " << ballPositions[i][k].r << " }";
+        }
+        out << "]";
+    }
+    out << "], \"timestamps\": [";
+
+    for(unsigned int i = 0; i < timestamps.size(); i++){
+        if(i != 0)
+            out << ", ";
+        out << timestamps[i];
+    }
+
+    out << "]}";
+
+    out.close();
+}
+
+vector<vector<Ball>> readBallPositions(string fileName){
+    vector<vector<Ball>> ballPositions;
+
+    FileStorage fs(fileName, FileStorage::READ);
+    cv::FileNode root = fs["positions"];
+    ballPositions.resize(root.size());
+    for(unsigned int i = 0; i < root.size(); i++){
+        cv::FileNode n = root[i];
+        ballPositions[i].resize(n.size());
+        for(unsigned int k = 0; k < n.size(); k++){
+            ballPositions[i][k].x = n[k]["x"];
+            ballPositions[i][k].y = n[k]["y"];
+            ballPositions[i][k].r = n[k]["r"];
+        }
+    }
+
+    return ballPositions;
+}
+
+vector<ViewDimensions> readViewDimensions(FileStorage& fs){
+    FileNode cameras = fs["cameras"];
+
+    vector<ViewDimensions> out(cameras.size());
+
+    for (unsigned int i = 0; i < cameras.size(); i++){
+        FileNode camera = cameras[i];
+        FileNode viewRect = camera["viewRect"];
+
+        out[i].x = viewRect["x"];
+        out[i].y = viewRect["y"];
+        out[i].width = viewRect["width"];
+        out[i].height = viewRect["height"];
+    }
+    return out;
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 3)
+    if (argc < 3)
     {
         printf("Not all arguments were given.\n");
         return -1;
@@ -159,58 +207,87 @@ int main(int argc, char **argv)
     try
     {
         FileStorage fs(argv[2], 0);
+
         cv::VideoCapture inputVideo;
 
-        ofstream ballPositions;
-        ballPositions.open ("ballPositions.json");
-
         inputVideo.open(argv[1]);
-        int frameCount = inputVideo.get(CAP_PROP_FRAME_COUNT);
-        Size S = Size((int)inputVideo.get(CAP_PROP_FRAME_WIDTH) * 0.3332,
-                      (int)inputVideo.get(CAP_PROP_FRAME_HEIGHT) * 0.5);
+        unsigned int frameCount = inputVideo.get(CAP_PROP_FRAME_COUNT);
+        Size S = Size((int)inputVideo.get(CAP_PROP_FRAME_WIDTH),
+                      (int)inputVideo.get(CAP_PROP_FRAME_HEIGHT));
         int ex = static_cast<int>(inputVideo.get(CAP_PROP_FOURCC)); // Get Codec Type- Int form
 
-        VideoWriter outputVideo("output.avi", ex, inputVideo.get(CAP_PROP_FPS), S, true);
+        vector<ViewDimensions> dimensions = readViewDimensions(fs);
+        vector<vector<Ball>> ballPositions;
+        vector<double> timeStamps;
 
-        if (!inputVideo.isOpened())
-        {
-            std::cout << "Error opening video stream or file" << std::endl;
-            return -1;
-        }
+        if(argc > 3){
+            ballPositions = readBallPositions("ballPositions.json");
+            for (unsigned int k = 0; k < ballPositions.size() && k < frameCount; k++)
+            {
+                cv::Mat frame;
+                inputVideo >> frame;
 
-        Ball ballPosition;
-        std::vector<Mat> views;
-        Mat currentFrame;
+                for(int i = 0; i < 6; i++)
+                {
 
-        ballPositions << "[";
-        for (int k = 0; k < frameCount; k++)
-        {
-            visualize_progress_bar(k, frameCount);
+                    if (ballPositions[k][i].r > 0.f)
+                    {
+                        // the origin of dimensions is in the bottom left corner but the origin of opencv images is in the top left corner
+                        float x = dimensions[i].x * S.width;
+                        float w = dimensions[i].width * S.width;
+                        float y = (1.f - dimensions[i].y) * S.height;
+                        float h = dimensions[i].height * S.height;
 
-            inputVideo >> currentFrame;
+                        int radius = std::round(ballPositions[k][i].r * w);
 
-            if(k > 0)
-                ballPositions << ", ";
+                        cv::Point center(std::round((ballPositions[k][i].x + 1.f)/2.f * w + x), std::round(y - (ballPositions[k][i].y+ 1.f)/2.f * h));
+                        cv::circle(frame, center, radius, BALL_DETECTION_COLOR, 3);
+                    }
+                }
 
-            ballPositions << "[";
-            views = crop_image(currentFrame, fs);
-            for(unsigned int i = 0; i < views.size(); i++){
-
-                analyze_view(views[i], ballPosition);
-                if(i > 0)
-                    ballPositions << ", ";
-                ballPositions << "{ x: " << ballPosition.x << ", y: " << ballPosition.y << ", r: " << ballPosition.r << " }";
+                imshow("dectected positions", frame);
+                cv::waitKey();
             }
-            ballPositions << "]";
-            //write_video_with_ball_detection(ballPosition, views[1], outputVideo);
         }
-        ballPositions << "]";
+        else
+        {
+            //VideoWriter outputVideo("output.avi", ex, inputVideo.get(CAP_PROP_FPS), , true);
 
-        ballPositions.close();
 
-        std::cout << "\nFinished" << std::endl;
+            if (!inputVideo.isOpened())
+            {
+                std::cout << "Error opening video stream or file" << std::endl;
+                return -1;
+            }
+
+            ballPositions.resize(frameCount);
+            timeStamps.resize(frameCount);
+            std::vector<Mat> views;
+            Mat currentFrame;
+
+            for (unsigned int k = 0; k < frameCount; k++)
+            {
+                visualize_progress_bar(k, frameCount);
+                inputVideo >> currentFrame;
+
+                if(currentFrame.empty())
+                    break;
+
+                views = crop_image(currentFrame, dimensions);
+                for(unsigned int i = 0; i < views.size(); i++){
+                    ballPositions[k].push_back(analyze_view(views[i]));
+
+                }
+
+                timeStamps[k] = inputVideo.get(cv::CAP_PROP_POS_MSEC) / 1000.0; // write seconds
+                //write_video_with_ball_detection(ballPositions[k][1], views[1], outputVideo);
+            }
+            writeBallPositions(ballPositions, timeStamps);
+
+            //outputVideo.release();
+        }
         inputVideo.release();
-        outputVideo.release();
+
     }
     catch (cv::Exception &e)
     {
