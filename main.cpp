@@ -23,13 +23,11 @@ struct ViewDimensions
     float x, y, width, height;
 };
 
-
 /* This function crops the current frame into six images
 that represent the six different views from the simulation. */
 std::vector<Mat> crop_image(Mat currentFrame, vector<ViewDimensions> dimensions)
 {
     std::vector<Mat> views;
-
 
     float frameWidth = currentFrame.size().width;
     float frameHeight = currentFrame.size().height;
@@ -50,13 +48,16 @@ std::vector<Mat> crop_image(Mat currentFrame, vector<ViewDimensions> dimensions)
 }
 
 /* This function analyzes a view to detect the ball and store the ball position in ballPositions*/
-Ball analyze_view(Mat view)
+Ball analyze_view(Mat view, int mode)
 {
+
+    std::vector<cv::Vec3f> balls;
+
     Ball noBall = {
-        0, // x coordiante
-        0, // y coordiante
+        0,  // x coordiante
+        0,  // y coordiante
         -1, // radius
-    }; // no ball present if radius negative
+    };      // no ball present if radius negative
 
     // convert colorspace for better ball detection from BGR to HSV.
     Mat hsv_conversion;
@@ -67,24 +68,52 @@ Ball analyze_view(Mat view)
     Mat ballMask1,
         ballMask2;
 
-    inRange(hsv_conversion, Scalar(0, 70, 50), Scalar(30, 255, 255), ballMask1);
-    inRange(hsv_conversion, Scalar(150, 70, 50), Scalar(179, 255, 255), ballMask2);
+    inRange(hsv_conversion, Scalar(0, 70, 70), Scalar(20, 255, 255), ballMask1);
+    inRange(hsv_conversion, Scalar(160, 70, 70), Scalar(179, 255, 255), ballMask2);
 
     Mat threshold_image;
     addWeighted(ballMask1, 1.0, ballMask2, 1.0, 0.0, threshold_image);
     GaussianBlur(threshold_image, threshold_image, cv::Size(9, 9), 2, 2);
 
-    // Use the Hough transform to detect circles (ball) in the combined threshold image
-    std::vector<cv::Vec3f>
-        balls;
-    HoughCircles(threshold_image, balls, HOUGH_GRADIENT, 1, threshold_image.rows / 8, 100, 20, 1, 100);
+    if (mode == 1)
+    {
+        vector<vector<Point>> contours;
+        vector<Vec4i> hierarchy;
+        findContours(threshold_image, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+
+        for (size_t i = 0; i < contours.size(); i++)
+        {
+            Point2f center;
+            float radius;
+            vector<Point> contours_poly;
+
+            approxPolyDP(contours[i], contours_poly, 3, true);
+            minEnclosingCircle(contours_poly, center, radius);
+            Vec3f b(center.x, center.y, radius);
+            balls.push_back(b);
+        }
+    }
+    else
+    {
+        //Use the Hough transform to detect circles (ball) in the combined threshold image
+        HoughCircles(threshold_image, balls, HOUGH_GRADIENT, 1, threshold_image.rows / 8, 100, 20, 1, 100);
+    }
+
     if (balls.size() == 0)
         return noBall;
+
+    // uncomment to show frame with ball detection
+    // Mat view_with_detected_ball;
+    // view.copyTo(view_with_detected_ball);
+    // Point2f center(balls[0][0], balls[0][1]);
+    // circle(view_with_detected_ball, center, balls[0][2], BALL_DETECTION_COLOR, 2);
+    // imshow("view_with_detected_ball", view_with_detected_ball);
+    // waitKey();
 
     Ball ballPosition = {
         balls[0][0] / float(view.cols) * 2.f - 1.f,
         (1.f - balls[0][1] / float(view.rows)) * 2.f - 1.f,
-        balls[0][2] / float(view.cols) };
+        balls[0][2] / float(view.cols)};
 
     return ballPosition;
 }
@@ -131,17 +160,20 @@ void visualize_progress_bar(float currentFrameNumber, float frameCount)
     std::cout.flush();
 };
 
-void writeBallPositions(vector<vector<Ball>> &ballPositions, vector<double> timestamps){
+void writeBallPositions(vector<vector<Ball>> &ballPositions, vector<double> timestamps)
+{
     ofstream out;
-    out.open ("ballPositions.json");
+    out.open("ballPositions.json");
     out << "{ \"positions\" : [";
 
-    for(unsigned int i = 0; i < ballPositions.size(); i++){
-        if(i > 0)
+    for (unsigned int i = 0; i < ballPositions.size(); i++)
+    {
+        if (i > 0)
             out << ", ";
         out << "[";
-        for(unsigned int k = 0; k < ballPositions[i].size(); k++){
-            if(k > 0)
+        for (unsigned int k = 0; k < ballPositions[i].size(); k++)
+        {
+            if (k > 0)
                 out << ", ";
             out << "{ \"x\": " << ballPositions[i][k].x << ", \"y\": " << ballPositions[i][k].y << ", \"r\": " << ballPositions[i][k].r << " }";
         }
@@ -149,8 +181,9 @@ void writeBallPositions(vector<vector<Ball>> &ballPositions, vector<double> time
     }
     out << "], \"timestamps\": [";
 
-    for(unsigned int i = 0; i < timestamps.size(); i++){
-        if(i != 0)
+    for (unsigned int i = 0; i < timestamps.size(); i++)
+    {
+        if (i != 0)
             out << ", ";
         out << timestamps[i];
     }
@@ -160,16 +193,19 @@ void writeBallPositions(vector<vector<Ball>> &ballPositions, vector<double> time
     out.close();
 }
 
-vector<vector<Ball>> readBallPositions(string fileName){
+vector<vector<Ball>> readBallPositions(string fileName)
+{
     vector<vector<Ball>> ballPositions;
 
     FileStorage fs(fileName, FileStorage::READ);
     cv::FileNode root = fs["positions"];
     ballPositions.resize(root.size());
-    for(unsigned int i = 0; i < root.size(); i++){
+    for (unsigned int i = 0; i < root.size(); i++)
+    {
         cv::FileNode n = root[i];
         ballPositions[i].resize(n.size());
-        for(unsigned int k = 0; k < n.size(); k++){
+        for (unsigned int k = 0; k < n.size(); k++)
+        {
             ballPositions[i][k].x = n[k]["x"];
             ballPositions[i][k].y = n[k]["y"];
             ballPositions[i][k].r = n[k]["r"];
@@ -179,12 +215,14 @@ vector<vector<Ball>> readBallPositions(string fileName){
     return ballPositions;
 }
 
-vector<ViewDimensions> readViewDimensions(FileStorage& fs){
+vector<ViewDimensions> readViewDimensions(FileStorage &fs)
+{
     FileNode cameras = fs["cameras"];
 
     vector<ViewDimensions> out(cameras.size());
 
-    for (unsigned int i = 0; i < cameras.size(); i++){
+    for (unsigned int i = 0; i < cameras.size(); i++)
+    {
         FileNode camera = cameras[i];
         FileNode viewRect = camera["viewRect"];
 
@@ -198,7 +236,7 @@ vector<ViewDimensions> readViewDimensions(FileStorage& fs){
 
 int main(int argc, char **argv)
 {
-    if (argc < 3)
+    if (argc < 4)
     {
         printf("Not all arguments were given.\n");
         return -1;
@@ -220,14 +258,15 @@ int main(int argc, char **argv)
         vector<vector<Ball>> ballPositions;
         vector<double> timeStamps;
 
-        if(argc > 3){
+        if (argc > 4)
+        {
             ballPositions = readBallPositions("ballPositions.json");
             for (unsigned int k = 0; k < ballPositions.size() && k < frameCount; k++)
             {
                 cv::Mat frame;
                 inputVideo >> frame;
 
-                for(int i = 0; i < 6; i++)
+                for (int i = 0; i < 6; i++)
                 {
 
                     if (ballPositions[k][i].r > 0.f)
@@ -240,7 +279,7 @@ int main(int argc, char **argv)
 
                         int radius = std::round(ballPositions[k][i].r * w);
 
-                        cv::Point center(std::round((ballPositions[k][i].x + 1.f)/2.f * w + x), std::round(y - (ballPositions[k][i].y+ 1.f)/2.f * h));
+                        cv::Point center(std::round((ballPositions[k][i].x + 1.f) / 2.f * w + x), std::round(y - (ballPositions[k][i].y + 1.f) / 2.f * h));
                         cv::circle(frame, center, radius, BALL_DETECTION_COLOR, 3);
                     }
                 }
@@ -252,7 +291,6 @@ int main(int argc, char **argv)
         else
         {
             //VideoWriter outputVideo("output.avi", ex, inputVideo.get(CAP_PROP_FPS), , true);
-
 
             if (!inputVideo.isOpened())
             {
@@ -270,13 +308,13 @@ int main(int argc, char **argv)
                 visualize_progress_bar(k, frameCount);
                 inputVideo >> currentFrame;
 
-                if(currentFrame.empty())
+                if (currentFrame.empty())
                     break;
 
                 views = crop_image(currentFrame, dimensions);
-                for(unsigned int i = 0; i < views.size(); i++){
-                    ballPositions[k].push_back(analyze_view(views[i]));
-
+                for (unsigned int i = 0; i < views.size(); i++)
+                {
+                    ballPositions[k].push_back(analyze_view(views[i], atoi(argv[3])));
                 }
 
                 timeStamps[k] = inputVideo.get(cv::CAP_PROP_POS_MSEC) / 1000.0; // write seconds
@@ -287,7 +325,6 @@ int main(int argc, char **argv)
             //outputVideo.release();
         }
         inputVideo.release();
-
     }
     catch (cv::Exception &e)
     {
