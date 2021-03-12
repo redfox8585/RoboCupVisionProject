@@ -222,14 +222,11 @@
 				else{
 					let w = window.innerWidth;
 					let h = window.innerHeight;
-					
-					// 180° rotation around y axis
-					const rotY180 = new THREE.Matrix4();
-					rotY180.set(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1);
+
 					for(r of renderers){
-						// the local camera coordinatesystem z Axis should point in the Viewing direction ( default for opengl: point away)
+						// the local camera coordinatesystem z Axis points away from the viewing direction ( default for opengl)
 						// the matrix is also transposed because the elements are stored in column major order but should be extracted in row major order
-						r.camera.matrix.multiply(rotY180).transpose();  
+						r.camera.matrix.transpose();  
 
 						// this is the focalLength coresponding to the x-axis in the image plane (x values there range from -1 to 1)
 						let focalLengthX = r.camera.projectionMatrix.elements[0];
