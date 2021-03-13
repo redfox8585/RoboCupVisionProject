@@ -8,7 +8,7 @@
 
 void writeBallPositions(std::vector<std::vector<cv::Mat>> &ballPositions, const std::vector<std::string>& keys, std::vector<float> timestamps){
     std::ofstream out;
-    out.open ("ballPositionsOut.json");
+    out.open ("ballPositionsOut.json", std::ofstream::trunc);
 
     out << "{";
     for(int k = 0; k < keys.size(); k++){
@@ -85,7 +85,7 @@ MainWindow::MainWindow(QWidget *parent)
     //viewTransform = (cv::Mat_<float>(4, 4) << 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1) * viewTransform;
 
     // durch eine Kamera
-    int camNum = 0;
+    int camNum = 2;
     cv::Mat A_inv;
     cv::invert(cameras[camNum].transform, A_inv);
     viewTransform *= A_inv;
@@ -204,7 +204,7 @@ void MainWindow::paintEvent(QPaintEvent *event)
     float ballRadius = 0.1;
     cv::Mat ballKFPos = (cv::Mat_<float>(4,1) << state.at<float>(0,0), state.at<float>(1,0), ballRadius, 1);
 
-    painter.drawText(QPointF(10,10), QString::number(measurments.at<float>(0,0)) + ", " +QString::number(measurments.at<float>(1,0)));
+    //painter.drawText(QPointF(10,10), QString::number(measurments.at<float>(0,0)) + ", " +QString::number(measurments.at<float>(1,0)));
     //painter.drawText(QPointF(10,10), QString::number(ballKFPos.at<float>(0,0)) + ", " +QString::number(ballKFPos.at<float>(1,0)));
 
     cv::Mat ballKF = viewTransform * ballKFPos;
@@ -244,7 +244,7 @@ void MainWindow::drawCamera(QPainter &painter, Camera &c, int i)
     painter.drawText(center + QPointF(10,10), QString::number(i));
 
     float focalL = c.focalLengthX;
-    cv::Mat p2 = p1 + viewTransform * c.getViewingDirection() * focalL;
+    cv::Mat p2 = p1 - viewTransform * c.getViewingDirection() * focalL;
     QPointF p2_(p2.at<float>(0,0), p2.at<float>(1,0));
 
     painter.drawLine(center, p2_);
@@ -268,9 +268,8 @@ cv::Mat MainWindow::calcBallPosition(Camera &camera, Ball &ball)
 
     // ball position on camera image plane
     cv::Mat imgPlanePos = ball.getPos();
-    imgPlanePos.at<float>(0,0) *= -1.f;
     imgPlanePos.at<float>(1,0) /= camera.aspectRatio;
-    imgPlanePos.at<float>(2,0) = focalL;
+    imgPlanePos.at<float>(2,0) = -focalL;
     imgPlanePos = camera.transform * imgPlanePos;
 
     // LGS Schnittpunkt: Ebene ex * u + ex * v + (0,0,radius)  Gerade p1 + t * d
@@ -301,9 +300,8 @@ cv::Mat MainWindow::calcCameraImgPointPosition(Camera &c, cv::Mat point2Dv4f)
 {
     float focalL = c.focalLengthX;
     cv::Mat proj = point2Dv4f.clone();
-    proj.at<float>(0,0) *= -1.f;
     proj.at<float>(1,0) /= c.aspectRatio;
-    proj.at<float>(2,0) = focalL;
+    proj.at<float>(2,0) = -focalL;
     return c.transform * proj;
 }
 

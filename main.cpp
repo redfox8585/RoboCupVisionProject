@@ -163,7 +163,7 @@ void visualize_progress_bar(float currentFrameNumber, float frameCount)
 void writeBallPositions(vector<vector<Ball>> &ballPositions, vector<double> timestamps)
 {
     ofstream out;
-    out.open("ballPositions.json");
+    out.open("ballPositions.json", ofstream::trunc);
     out << "{ \"positions\" : [";
 
     for (unsigned int i = 0; i < ballPositions.size(); i++)
@@ -290,7 +290,7 @@ int main(int argc, char **argv)
         }
         else
         {
-            //VideoWriter outputVideo("output.avi", ex, inputVideo.get(CAP_PROP_FPS), , true);
+            //VideoWriter outputVideo("output.avi", ex, inputVideo.get(CAP_PROP_FPS), S, true);
 
             if (!inputVideo.isOpened())
             {
